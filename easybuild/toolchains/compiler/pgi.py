@@ -11,7 +11,7 @@
 # the Hercules foundation (http://www.herculesstichting.be/in_English)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
-# http://github.com/hpcugent/easybuild
+# https://github.com/easybuilders/easybuild
 #
 # EasyBuild is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -65,6 +65,7 @@ class Pgi(Compiler):
         'defaultprec': ['Mflushz'],
         'loose': ['Mfprelaxed'],
         'veryloose': ['Mfprelaxed=div,order,intrinsic,recip,sqrt,rsqrt', 'Mfpapprox'],
+        'vectorize': {False: 'Mnovect', True: 'Mvect'},
     }
 
     # used when 'optarch' toolchain option is enabled (and --optarch is not specified)

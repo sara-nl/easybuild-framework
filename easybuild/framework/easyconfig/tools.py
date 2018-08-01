@@ -1,5 +1,5 @@
 # #
-# Copyright 2009-2017 Ghent University
+# Copyright 2009-2018 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
@@ -8,7 +8,7 @@
 # Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
-# http://github.com/hpcugent/easybuild
+# https://github.com/easybuilders/easybuild
 #
 # EasyBuild is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,7 +52,7 @@ from easybuild.framework.easyconfig.format.yeb import quote_yaml_special_chars
 from easybuild.tools.build_log import EasyBuildError, print_msg
 from easybuild.tools.config import build_option
 from easybuild.tools.environment import restore_env
-from easybuild.tools.filetools import find_easyconfigs, is_patch_file, which, write_file
+from easybuild.tools.filetools import find_easyconfigs, is_patch_file, resolve_path, which, write_file
 from easybuild.tools.github import fetch_easyconfigs_from_pr, download_repo
 from easybuild.tools.modules import modules_tool
 from easybuild.tools.multidiff import multidiff
@@ -75,7 +75,8 @@ try:
     sys.path.append('..')
     sys.path.append('/usr/lib/graphviz/python/')
     sys.path.append('/usr/lib64/graphviz/python/')
-    # https://pypi.python.org/pypi/pygraphviz
+    # Python bindings to Graphviz (http://www.graphviz.org/),
+    # see https://pypi.python.org/pypi/graphviz-python
     # graphviz-python (yum) or python-pygraphviz (apt-get)
     # or brew install graphviz --with-bindings (OS X)
     import gv
@@ -225,7 +226,7 @@ def _dep_graph_dump(dgr, filename):
         _dep_graph_gv(dottxt, filename)
 
 
-@only_if_module_is_available('gv', pkgname='graphviz')
+@only_if_module_is_available('gv', pkgname='graphviz-python')
 def _dep_graph_gv(dottxt, filename):
     """Render dependency graph to file using graphviz."""
     # try and render graph in specified file format
@@ -255,7 +256,8 @@ def get_paths_for(subdir=EASYCONFIGS_PKG_SUBDIR, robot_path=None):
     if eb_path is None:
         _log.warning("'eb' not found in $PATH, failed to determine installation prefix")
     else:
-        # eb should reside in <install_prefix>/bin/eb
+        # real location to 'eb' should be <install_prefix>/bin/eb
+        eb_path = resolve_path(eb_path)
         install_prefix = os.path.dirname(os.path.dirname(eb_path))
         path_list.append(install_prefix)
         _log.debug("Also considering installation prefix %s..." % install_prefix)
@@ -473,10 +475,11 @@ def find_related_easyconfigs(path, ec):
     return sorted(res)
 
 
-def review_pr(pr, colored=True, branch='develop'):
+def review_pr(paths=None, pr=None, colored=True, branch='develop'):
     """
-    Print multi-diff overview between easyconfigs in specified PR and specified branch.
+    Print multi-diff overview between specified easyconfigs or PR and specified branch.
     :param pr: pull request number in easybuild-easyconfigs repo to review
+    :param paths: path tuples (path, generated) of easyconfigs to review
     :param colored: boolean indicating whether a colored multi-diff should be generated
     :param branch: easybuild-easyconfigs branch to compare with
     """
@@ -484,13 +487,23 @@ def review_pr(pr, colored=True, branch='develop'):
 
     download_repo_path = download_repo(branch=branch, path=tmpdir)
     repo_path = os.path.join(download_repo_path, 'easybuild', 'easyconfigs')
-    pr_files = [path for path in fetch_easyconfigs_from_pr(pr) if path.endswith('.eb')]
+
+    if pr:
+        pr_files = [path for path in fetch_easyconfigs_from_pr(pr) if path.endswith('.eb')]
+    elif paths:
+        pr_files = paths
+    else:
+        raise EasyBuildError("No PR # or easyconfig path specified")
 
     lines = []
     ecs, _ = parse_easyconfigs([(fp, False) for fp in pr_files], validate=False)
     for ec in ecs:
         files = find_related_easyconfigs(repo_path, ec['ec'])
-        _log.debug("File in PR#%s %s has these related easyconfigs: %s" % (pr, ec['spec'], files))
+        if pr:
+            pr_msg = "PR#%s" % pr
+        else:
+            pr_msg = "new PR"
+        _log.debug("File in %s %s has these related easyconfigs: %s" % (pr_msg, ec['spec'], files))
         if files:
             lines.append(multidiff(ec['spec'], files, colored=colored))
         else:

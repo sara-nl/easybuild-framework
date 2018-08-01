@@ -1,5 +1,5 @@
 # #
-# Copyright 2009-2017 Ghent University
+# Copyright 2009-2018 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
@@ -8,7 +8,7 @@
 # Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
-# http://github.com/hpcugent/easybuild
+# https://github.com/easybuilders/easybuild
 #
 # EasyBuild is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@ import re
 import sys
 import tempfile
 from copy import copy
+from datetime import datetime
 from vsc.utils import fancylogger
 from vsc.utils.exceptions import LoggedException
 
@@ -112,11 +113,12 @@ class EasyBuildLog(fancylogger.FancyLogger):
 
     def experimental(self, msg, *args, **kwargs):
         """Handle experimental functionality if EXPERIMENTAL is True, otherwise log error"""
+        common_msg = "Experimental functionality. Behaviour might change/be removed later"
         if EXPERIMENTAL:
-            msg = 'Experimental functionality. Behaviour might change/be removed later. ' + msg
+            msg = common_msg + ': ' + msg
             self.warning(msg, *args, **kwargs)
         else:
-            msg = 'Experimental functionality. Behaviour might change/be removed later (use --experimental option to enable). ' + msg
+            msg = common_msg + " (use --experimental option to enable): " + msg
             raise EasyBuildError(msg, *args)
 
     def deprecated(self, msg, ver, max_ver=None, *args, **kwargs):
@@ -128,8 +130,17 @@ class EasyBuildLog(fancylogger.FancyLogger):
                     else: version to check against max_ver to determine warning vs exception
         :param max_ver: version threshold for warning vs exception (compared to 'ver')
         """
+        # provide log_callback function that both logs a warning and prints to stderr
+        def log_callback_warning_and_print(msg):
+            """Log warning message, and also print it to stderr."""
+            self.warning(msg)
+            sys.stderr.write(msg + '\n')
+
+        kwargs['log_callback'] = log_callback_warning_and_print
+
         # always raise an EasyBuildError, nothing else
         kwargs['exception'] = EasyBuildError
+
         if max_ver is None:
             msg += "; see %s for more information" % DEPRECATED_DOC_URL
             fancylogger.FancyLogger.deprecated(self, msg, str(CURRENT_VERSION), ver, *args, **kwargs)
@@ -169,7 +180,7 @@ _init_fancylog = fancylogger.getLogger(fname=False)
 del _init_fancylog.manager.loggerDict[_init_fancylog.name]
 
 # we need to make sure there is a handler
-fancylogger.logToFile(filename=os.devnull)
+fancylogger.logToFile(filename=os.devnull, max_bytes=0)
 
 # EasyBuildLog
 _init_easybuildlog = fancylogger.getLogger(fname=False)
@@ -185,7 +196,7 @@ def init_logging(logfile, logtostdout=False, silent=False, colorize=fancylogger.
             fd, logfile = tempfile.mkstemp(suffix='.log', prefix='easybuild-')
             os.close(fd)
 
-        fancylogger.logToFile(logfile)
+        fancylogger.logToFile(logfile, max_bytes=0)
         print_msg('temporary log file in case of crash %s' % (logfile), log=None, silent=silent)
 
     log = fancylogger.getLogger(fname=False)
@@ -208,9 +219,15 @@ def get_log(name=None):
     log.nosupport("Use of get_log function", '2.0')
 
 
-def print_msg(msg, log=None, silent=False, prefix=True, newline=True):
+def print_msg(msg, log=None, silent=False, prefix=True, newline=True, stderr=False):
     """
-    Print a message to stdout.
+    Print a message.
+
+    :param log: logger instance to also message to
+    :param silent: be silent (only log, don't print)
+    :param prefix: include message prefix characters ('== ')
+    :param newline: end message with newline
+    :param stderr: print to stderr rather than stdout
     """
     if log:
         log.info(msg)
@@ -219,9 +236,12 @@ def print_msg(msg, log=None, silent=False, prefix=True, newline=True):
             msg = ' '.join([EB_MSG_PREFIX, msg])
 
         if newline:
-            print msg
+            msg += '\n'
+
+        if stderr:
+            sys.stderr.write(msg)
         else:
-            print msg,
+            sys.stdout.write(msg)
 
 
 def dry_run_set_dirs(prefix, builddir, software_installdir, module_installdir):
@@ -278,4 +298,23 @@ def print_warning(message, silent=False):
     """
     Print warning message.
     """
-    print_msg("WARNING: %s\n" % message, silent=silent)
+    if not silent:
+        sys.stderr.write("\nWARNING: %s\n\n" % message)
+
+
+def time_str_since(start_time):
+    """
+    Return string representing amount of time that has passed since specified timestamp
+
+    :param start_time: datetime value representing start time
+    :return: string value representing amount of time passed since start_time;
+             format: "[[%d hours, ]%d mins, ]%d sec(s)"
+    """
+    tot_time = datetime.now() - start_time
+    tot_secs = tot_time.seconds + tot_time.days * 24 * 3600
+    if tot_secs > 0:
+        res = datetime.utcfromtimestamp(tot_secs).strftime('%Hh%Mm%Ss')
+    else:
+        res = "< 1s"
+
+    return res

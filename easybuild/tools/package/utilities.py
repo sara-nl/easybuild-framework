@@ -1,5 +1,5 @@
 ##
-# Copyright 2015-2017 Ghent University
+# Copyright 2015-2018 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
@@ -8,7 +8,7 @@
 # Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
-# http://github.com/hpcugent/easybuild
+# https://github.com/easybuilders/easybuild
 #
 # EasyBuild is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -42,13 +42,13 @@ from vsc.utils.patterns import Singleton
 
 from easybuild.tools.config import PKG_TOOL_FPM, PKG_TYPE_RPM, build_option, get_package_naming_scheme, log_path
 from easybuild.tools.build_log import EasyBuildError
-from easybuild.tools.filetools import which
+from easybuild.tools.filetools import change_dir, which
 from easybuild.tools.package.package_naming_scheme.pns import PackageNamingScheme
 from easybuild.tools.run import run_cmd
 from easybuild.tools.toolchain import DUMMY_TOOLCHAIN_NAME
 from easybuild.tools.utilities import import_available_modules
-
 _log = fancylogger.getLogger('tools.package')  # pylint: disable=C0103
+
 
 
 def avail_package_naming_schemes():
@@ -83,11 +83,7 @@ def package_with_fpm(easyblock):
     pkgtype = build_option('package_type')
     _log.info("Will be creating %s package(s) in %s", pkgtype, workdir)
 
-    try:
-        origdir = os.getcwd()
-        os.chdir(workdir)
-    except OSError, err:
-        raise EasyBuildError("Failed to chdir into workdir %s: %s", workdir, err)
+    origdir = change_dir(workdir)
 
     package_naming_scheme = ActivePNS()
 
@@ -108,6 +104,10 @@ def package_with_fpm(easyblock):
         '--description', easyblock.cfg["description"],
         '--url', easyblock.cfg["homepage"],
     ]
+
+    extra_pkg_options = build_option('package_tool_options')
+    if extra_pkg_options:
+        cmdlist.extend(extra_pkg_options.split(' '))
 
     if build_option('debug'):
         cmdlist.append('--debug')
@@ -148,10 +148,7 @@ def package_with_fpm(easyblock):
 
     _log.info("Created %s package(s) in %s", pkgtype, workdir)
 
-    try:
-        os.chdir(origdir)
-    except OSError, err:
-        raise EasyBuildError("Failed to chdir back to %s: %s", origdir, err)
+    change_dir(origdir)
 
     return workdir
 

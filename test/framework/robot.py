@@ -1,5 +1,5 @@
 # #
-# Copyright 2012-2017 Ghent University
+# Copyright 2012-2018 Ghent University
 #
 # This file is part of EasyBuild,
 # originally created by the HPC team of Ghent University (http://ugent.be/hpc/en),
@@ -8,7 +8,7 @@
 # Flemish Research Foundation (FWO) (http://www.fwo.be/en)
 # and the Department of Economy, Science and Innovation (EWI) (http://www.ewi-vlaanderen.be/en).
 #
-# http://github.com/hpcugent/easybuild
+# https://github.com/easybuilders/easybuild
 #
 # EasyBuild is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -595,6 +595,34 @@ class RobotTest(EnhancedTestCase):
         regex = re.compile(r"^ \* \[.\] .*/__archive__/.*/ictce-3.2.2.u3.eb \(module: ictce/3.2.2.u3\)", re.M)
         self.assertTrue(regex.search(outtxt), "Found pattern %s in %s" % (regex.pattern, outtxt))
 
+
+    def test_search_paths(self):
+        """Test search_paths command line argument."""
+        fd, dummylogfn = tempfile.mkstemp(prefix='easybuild-dummy', suffix='.log')
+        os.close(fd)
+
+        test_ecs_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'easyconfigs', 'test_ecs')
+
+        test_ec = 'toy-0.0-deps.eb'
+        shutil.copy2(os.path.join(test_ecs_path, 't', 'toy', test_ec), self.test_prefix)
+        self.assertFalse(os.path.exists(test_ec))
+
+        args = [
+            '--search-paths=%s' % self.test_prefix,  # add to search path
+            '--tmpdir=%s' % self.test_prefix,
+            '--search',
+            'toy',
+        ]
+        self.mock_stdout(True)
+        _ = self.eb_main(args, logfile=dummylogfn, raise_error=True)
+        outtxt = self.get_stdout()
+        self.mock_stdout(False)
+
+        # Make sure we found the copied file
+        regex = re.compile(r"^ \* %s$" % os.path.join(self.test_prefix, test_ec), re.M)
+        self.assertTrue(regex.search(outtxt), "Found pattern %s in %s" % (regex.pattern, outtxt))
+
+
     def test_det_easyconfig_paths_from_pr(self):
         """Test det_easyconfig_paths function, with --from-pr enabled as well."""
         if self.github_token is None:
@@ -625,7 +653,7 @@ class RobotTest(EnhancedTestCase):
         args = [
             os.path.join(test_ecs_path, 't', 'toy', 'toy-0.0.eb'),
             test_ec,  # relative path, should be resolved via robot search path
-            # PR for foss/2015a, see https://github.com/hpcugent/easybuild-easyconfigs/pull/1239/files
+            # PR for foss/2015a, see https://github.com/easybuilders/easybuild-easyconfigs/pull/1239/files
             '--from-pr=1239',
             'FFTW-3.3.4-gompi-2015a.eb',
             'gompi-2015a-test.eb',  # relative path, available in robot search path
